@@ -19,10 +19,10 @@ ReadB:
 	BEQ ReadBDone   ; branch to ReadBDone if button is NOT pressed (0)
                   ; add instructions here to do something when button IS pressed (1)
 ;Jump
-	LDA $0200       ; load sprite Y position
+	LDA OAM_RAM_ADDR       ; load sprite Y position
 	SEC             ; make sure the carry flag is clear
 	SBC #$04        ; A = A + 1
-	STA $0200       ; save sprite X position
+	STA OAM_RAM_ADDR       ; save sprite X position
     STA PlayerY
 	
 	LDA $0204       ; load sprite X position
@@ -169,10 +169,10 @@ ReadRightDone:        ; handling this button is done
 	CMP IsPlayerGrounded
 	BNE TouchingGround
 		;~Gravity
-		LDA $0200       ; load sprite X position
+		LDA OAM_RAM_ADDR       ; load sprite X position
 		CLC             ; make sure the carry flag is clear
 		ADC #$02        ; A = A + 1
-		STA $0200       ; save sprite X position
+		STA OAM_RAM_ADDR      ; save sprite X position
 		STA PlayerY
 		
 		LDA $0204       ; load sprite X position
