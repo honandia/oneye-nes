@@ -1,0 +1,128 @@
+;#4C
+.use Global,*
+.use Ppu
+.use Vblank
+.use Game
+
+.segment "HEADER"
+
+.byte "NES"
+.byte $1a
+.byte $02 		; 4 - 2*16k PRG ROM
+.byte $01 		; 5 - 8k CHR ROM
+.byte %00000001	; 6 - mapper
+.byte $00 		; 7
+.byte $00 		; 8 - 
+.byte $00 		; 9 - NTSC
+.byte $00
+; Filler
+.byte $00,$00,$00,$00,$00
+
+.code
+
+PALETTE:
+	;.byte $29,$19,$39,$20, $29,$00,$10,$20, $29,$00,$10,$20, $29,$00,$10,$20
+	;.byte $29,$08,$19,$39, $29,$2D,$10,$37, $29,$07,$17,$27, $29,$0F,$10,$20
+	;.byte $29,$03,$14,$35, $29,$15,$27,$37, $29,$04,$10,$30, $29,$01,$21,$3C
+	
+	.byte $0F,$0F,$16,$25, $0F,$1C,$2C,$39, $0F,$07,$17,$27, $0F,$00,$10,$20
+	.byte $0F,$03,$14,$35, $0F,$15,$27,$37, $0F,$04,$25,$30, $0F,$01,$21,$3C
+	
+	;$29,$05,$16,$27
+
+main:
+	cld
+	ldx #$40
+	stx $4017 ;disable APU frame IRQ
+	ldx #$FF
+	txs
+	lda #$00
+	sta $4015
+	
+	jsr clearRam
+	jsr Ppu.startup
+	jsr Ppu.disableVideo
+	Game.loadPalette_VBL Game.PALETTE
+	;jsr Palette.clear
+	;jsr loadChr
+	jsr Ppu.enableVideo
+	jsr Game.initialize
+	
+	@mainLoop:
+		lda Vblank.nmiActive
+		beq @mainLoop
+		jsr updateInput
+		jsr Game.update
+		lda #0
+		sta Vblank.nmiActive
+		jmp @mainLoop
+	
+; poll joypad registers
+.proc updateInput ;x,a
+	lda joy1
+	sta joy1Prev
+	lda joy2
+	sta joy2Prev
+	
+	ldx #$01
+	stx $4016
+	dex
+	stx $4016
+	ldx #$08
+	@loop:
+		lda $4016
+		lsr
+		rol joy1
+		lda $4017
+		lsr
+		rol joy2
+		dex
+		bne @loop
+	
+	lda joy1
+	eor joy1Prev
+	pha
+	and joy1
+	sta joy1Press
+	pla
+	and joy1Prev
+	sta joy1Release
+	lda joy2
+	eor joy2Prev
+	pha
+	and joy2
+	sta joy2Press
+	pla
+	and joy2Prev
+	sta joy2Release
+	rts
+.endproc
+
+clearRam:
+	ldx #$00
+	lda #$00
+	@loop:
+		sta $00,x
+		sta $200,x
+		sta $300,x
+		sta $400,x
+		sta $500,x
+		sta $600,x
+		sta $700,x
+		inx
+		bne @loop
+	rts
+
+irq:
+	rti
+
+.segment "CHRROM"
+CHR:
+.incbin "data/bananarang.chr"
+
+.segment "VECTORS"
+.word Vblank.nmi
+.word main
+.word irq
+
+

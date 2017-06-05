@@ -1,0 +1,31 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+
+.proc run
+	Ai.switch update,create,,damage
+	rts
+.endproc
+
+.proc update
+	lda #0
+	sta Actor.vx,x
+	sta Actor.vy,x
+	lda frameCount
+	and #1
+	beq @end
+		Ai.Util.moveTowardsHero #1
+		Ai.Util.setDirectionAnimation Data.Animation.MINOTAUR_WALK_LEFT, Data.Animation.MINOTAUR_WALK_UP, Data.Animation.MINOTAUR_WALK_RIGHT, Data.Animation.MINOTAUR_WALK_DOWN
+	@end:
+	rts
+.endproc
+
+create:
+	Actor.setAnimation Data.Animation.MINOTAUR_WALK_DOWN
+	rts
+
+damage:
+	lda Ai.arg0
+	jsrrts Ai.Util.damage
+

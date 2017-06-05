@@ -1,0 +1,149 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Actor
+
+.macro moveTowardsHero speed
+	lda speed
+	jsr _moveTowardsHero
+.endmacro
+.proc _moveTowardsHero
+	speed: .resbss 1
+	sta speed
+	lda Ai.Hero.py
+	clc
+	adc #4
+	cmp Actor.py,x
+	bcc @up
+	lda Ai.Hero.py
+	sec
+	sbc #4
+	cmp Actor.py,x
+	bcc @skipVertical
+	@down:
+		lda speed
+		sta Actor.vy,x
+		lda #Actor.DIRECTION_DOWN
+		sta Actor.direction,x
+		jmp @skipVertical
+	@up:
+		lda #0
+		sec
+		sbc speed
+		sta Actor.vy,x
+		lda #Actor.DIRECTION_UP
+		sta Actor.direction,x
+	@skipVertical:
+	
+	lda Ai.Hero.px
+	clc
+	adc #4
+	cmp Actor.px,x
+	bcc @left
+	lda Ai.Hero.px
+	sec
+	sbc #4
+	cmp Actor.px,x
+	bcc @skipHorizontal
+	@right:
+		lda speed
+		sta Actor.vx,x
+		lda #Actor.DIRECTION_RIGHT
+		sta Actor.direction,x
+		jmp @skipHorizontal
+	@left:
+		lda #0
+		sec
+		sbc speed
+		sta Actor.vx,x
+		lda #Actor.DIRECTION_LEFT
+		sta Actor.direction,x
+	@skipHorizontal:
+	rts
+.endproc
+
+.macro setDirectionAnimation left,up,right,down ;y
+	lda #<left
+	sta _setDirectionAnimation.left
+	lda #>left
+	sta _setDirectionAnimation.left+1
+	lda #<up
+	sta _setDirectionAnimation.up
+	lda #>up
+	sta _setDirectionAnimation.up+1
+	lda #<right
+	sta _setDirectionAnimation.right
+	lda #>right
+	sta _setDirectionAnimation.right+1
+	lda #<down
+	ldy #>down
+	jsr _setDirectionAnimation
+.endmacro
+.proc _setDirectionAnimation
+	;vars sequential in memory!
+	left: .resbss 2
+	up: .resbss 2
+	right: .resbss 2
+	down: .resbss 2
+	sta down
+	sty down+1
+	lda Actor.direction,x
+	asl a
+	tay
+	lda left,y
+	pha
+	lda left+1,y
+	tay
+	pla
+	jsrrts Actor._setAnimation
+.endproc
+
+.proc getDistanceFromHero ;x(in)
+	tmpPx: .resbss 1
+	lda Ai.Hero.px
+	sec
+	sbc Actor.px,x
+	abs a
+	sta tmpPx
+
+	lda Ai.Hero.py
+	sec
+	sbc Actor.py,x
+	abs a
+	
+	clc
+	adc tmpPx
+	rts
+.endproc
+
+.proc damage ;a(in:amount)
+	lda Actor.hp,x
+	sec
+	sbc Ai.arg0
+	sta Actor.hp,x
+	beq @destroy
+	bmi @destroy
+	rts
+	@destroy:
+		jsr Actor.createExplosion
+		jsrrts Actor.destroy
+.endproc
+
+.macro createShadow verticalOffset
+	lda verticalOffset
+	jsr _createShadow
+.endmacro
+.proc _createShadow ;y(out:shadow index),x(in:actor to attach to)
+	tmpX = tmp1
+	pha
+	stx tmpX
+	Actor.createParticle #Data.Actor.ID_SHADOW
+	lda tmpX
+	sta Ai.Shadow.attachedTo,x
+	pla
+	sta Ai.Shadow.verticalOffset,x
+	txa
+	tay
+	ldx tmpX
+	rts
+.endproc

@@ -1,0 +1,22 @@
+.use Actor
+.use Ai
+.use Data.Animation
+
+.proc run
+	Ai.switch update,create,,damage
+	rts
+.endproc
+
+.proc update
+	rts
+.endproc
+
+create:
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	Actor.setAnimation Data.Animation.POWERUP_SPARKLE
+	rts
+
+damage:
+	lda #Ai.RESULT::PASS_THROUGH
+	sta Ai.result
+	rts

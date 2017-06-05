@@ -1,0 +1,76 @@
+.use Global,*
+nmiActive: .reszp 1
+cmdAddr: .reszp 2
+
+wait4:
+	jsr wait
+	jsr wait
+	jsr wait
+	jsrrts wait
+	
+wait:
+	@loop:
+		lda Vblank.nmiActive
+		beq @loop
+	lda #0
+	sta Vblank.nmiActive
+	rts
+	
+.scope cmd
+	;.macro push addr
+	;	lda addr
+	;	sta cmdAddr
+	;	lda addr+1
+	;	sta cmdAddr+1
+	;.endmacro
+	.macro replace addr
+		lda #<addr
+		sta cmdAddr
+		lda #>addr
+		sta cmdAddr+1
+	.endmacro
+	
+	end:
+		lda #0
+		sta cmdAddr+1
+		rts
+.endscope
+		
+runCmdFunc:
+	jmp (cmdAddr)
+		
+nmi:
+	pha
+	txa
+	pha
+	tya
+	pha
+	
+	lda nmiActive ;no sprite graphics updates as long as the game is lagging
+	bne @skip
+		lda #$00
+		sta OAMADDR
+		lda #>oam
+		sta $4014
+		
+		;no anything, actually
+		lda cmdAddr+1
+		beq @skip
+			jsr runCmdFunc
+	@skip:
+	
+	inc16 frameCount
+	lda #1
+	sta nmiActive
+	
+	bit PPUSTATUS
+	lda #0
+	sta PPUSCROLL
+	sta PPUSCROLL
+	
+	pla
+	tay
+	pla
+	tax
+	pla
+	rti

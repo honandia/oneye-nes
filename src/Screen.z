@@ -1,0 +1,158 @@
+.use Global,*
+.use Game
+.use Ppu
+.use Actor
+
+activeScreen: .reszp 1
+screenTimer: .reszp 1
+
+ID_NONE = $FF
+ID_TITLE = 0
+ID_GAME_OVER = 1
+ID_ENDING = 2
+ID_STORY = 3
+
+update:
+	lda activeScreen
+	cmp #ID_TITLE
+	beq Title.update
+	cmp #ID_GAME_OVER
+	beq GameOver.update
+	cmp #ID_ENDING
+	beq Ending.update
+	cmp #ID_STORY
+	bne @skipStoryUpdate
+		jmp Story.update
+	@skipStoryUpdate:
+	rts
+
+.scope Title
+	load:
+		jsr Actor.destroyAllButHero
+		jsr Actor.updateAll
+		lda #ID_TITLE
+		sta activeScreen
+		jsr Ppu.disableVideo
+		Game.loadPalette_VBL TITLE_PALETTE
+		jsr Ppu.enableVideo
+		::load TITLE
+		rts
+	update:
+		lda joy1Press
+		and #JOY_START
+		beq @end
+			jsr ::Story.load
+		@end:
+		rts
+.endscope
+
+.scope GameOver
+	load:
+		jsr Actor.destroyAllButHero
+		jsr Actor.updateAll
+		lda #ID_GAME_OVER
+		sta activeScreen
+		jsr Ppu.disableVideo
+		Game.loadPalette_VBL GAME_OVER_PALETTE
+		jsr Ppu.enableVideo
+		::load GAME_OVER
+		rts
+	update:
+		lda joy1Press
+		and #JOY_START
+		beq @end
+			jsr ::Title.load
+		@end:
+		rts
+.endscope
+
+.scope Ending
+	load:
+		ldx #Actor.INDEX_HERO
+		jsr Actor.destroy
+		jsr Actor.destroyAllButHero
+		jsr Actor.updateAll
+		lda #ID_ENDING
+		sta activeScreen
+		jsr Ppu.disableVideo
+		Game.loadPalette_VBL ENDING_PALETTE
+		jsr Ppu.enableVideo
+		::load ENDING
+		rts
+	update:
+		rts
+.endscope
+
+.scope Story
+	load:
+		jsr Actor.destroyAllButHero
+		jsr Actor.updateAll
+		lda #ID_STORY
+		sta activeScreen
+		jsr Ppu.disableVideo
+		Game.loadPalette_VBL STORY_PALETTE
+		jsr Ppu.enableVideo
+		::load STORY
+		lda #255
+		sta screenTimer
+		rts
+	update:
+		lda frameCount
+		and #1
+		bne @skipTimer
+			dec screenTimer
+			beq @loadTitle
+		@skipTimer:
+		lda joy1Press
+		and #JOY_START
+		beq @end
+		@loadTitle:
+			jsr Game.start
+		@end:
+		rts
+.endscope
+
+.macro load addr
+	lda #<addr
+	ldy #>addr
+	jsr _load
+.endmacro
+.proc _load
+	addr: .reszp 2
+	sta addr
+	sty addr+1
+	jsr Ppu.disableVideo
+	Ppu.setAddr $2000
+	ldy #0
+	jsr @write256
+	jsr @write256
+	jsr @write256
+	jsr @write256
+	jsrrts Ppu.enableVideo
+	@write256:
+		lda (addr),y
+		sta PPUDATA
+		iny
+		bne @write256
+		inc addr+1
+		rts
+.endproc
+
+STORY: .incbin "data/banananana-story.nam"
+TITLE: .incbin "data/banananana-title.nam"
+GAME_OVER: .incbin "data/banananana-game-over.nam"
+ENDING: .incbin "data/banananana-win.nam"
+
+
+TITLE_PALETTE: ;.incbin "data/banananana-title.pal"
+.byte $28,$08,$19,$39, $29,$07,$17,$27, $29,$00,$10,$20, $29,$00,$10,$20
+.byte $29,$0F,$0F,$0F, $29,$0F,$0F,$0F, $29,$0F,$0F,$0F, $29,$0F,$0F,$0F
+
+ENDING_PALETTE: ;.incbin "data/banananana-win.pal"
+STORY_PALETTE:
+GAME_OVER_PALETTE: ;.incbin "data/banananana-game-over.nam.pal"
+.byte $07,$27,$16,$36, $07,$0F,$10,$20, $29,$00,$10,$20, $07,$17,$26,$36
+.byte $07,$0F,$0F,$0F, $07,$0F,$0F,$0F, $07,$0F,$0F,$0F, $07,$0F,$0F,$0F
+
+
+

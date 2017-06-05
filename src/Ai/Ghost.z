@@ -1,0 +1,79 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+
+state = Actor.var0
+shadowIndex = Actor.var1
+STATE_IDLE = 0
+STATE_ATTACK = 1
+
+
+
+.proc run
+	Ai.switch update,create,,damage,destroy
+	rts
+.endproc
+
+.proc update
+	tmpPx = tmp1
+	tmpPy = tmp2
+	tmpX = tmp3
+	lda state,x
+	cmp #STATE_ATTACK
+	beq attack
+	idle:
+		jsr Ai.Util.getDistanceFromHero
+		cmp #$50
+		bcs @end
+			lda #STATE_ATTACK
+			sta state,x
+		@end:
+		rts
+	attack:		
+		lda #0
+		sta Actor.vx,x
+		sta Actor.vy,x
+		lda frameCount
+		and #1
+		bne @skipMovement
+			Ai.Util.moveTowardsHero #1
+		@skipMovement:
+		
+		lda Actor.direction,x
+		cmp #Actor.DIRECTION_RIGHT
+		beq @right
+		@left:
+			Actor.setAnimation Data.Animation.GHOST_ATTACK_LEFT
+			rts
+		@right:
+			Actor.setAnimation Data.Animation.GHOST_ATTACK_RIGHT
+			rts
+.endproc
+
+create:
+	Ai.Util.createShadow #20
+	tya
+	sta shadowIndex,x
+	
+	lda #STATE_IDLE
+	sta state,x
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	Actor.setAnimation Data.Animation.GHOST_FLOAT
+	rts
+
+damage:
+	lda Ai.arg0
+	jsrrts Ai.Util.damage
+	
+destroy:
+	txa
+	pha
+	lda shadowIndex,x
+	bmi @end
+		tax
+		jsr Actor.destroy
+	@end:
+	pla
+	tax
+	rts

@@ -1,0 +1,96 @@
+.use Global,*
+.use Actor
+.use Data.Actor
+
+.enum EVENT
+	UPDATE = 0
+	CREATE = 1
+	COLLIDE = 2 ;arg0:colliding actor
+	DAMAGE = 3 ;arg0:amount
+	DESTROY = 4
+.endenum
+
+.enum RESULT
+	DAMAGED = 0
+	INVINCIBLE
+	PASS_THROUGH
+	DAMAGED_NO_KNOCKBACK
+.endenum
+
+arg0: .reszp 1
+arg1: .reszp 1
+result: .reszp 1
+
+.proc dummy
+	rts
+.endproc
+
+.macro call _event ;x(in:actor index),y,tmp0
+	ldy _event
+	jsr _call
+.endmacro
+.proc _call
+	sty tmp0
+	lda #0
+	sta result
+	txa
+	pha
+	jsr @aiFunc
+	pla
+	tax
+	rts
+	@aiFunc:
+		lda Actor.id,x
+		asl a
+		tay
+		lda Data.Actor.AI+1,y
+		pha
+		lda Data.Actor.AI,y
+		pha
+		ldy tmp0
+		rts ;jump table
+	;rts
+.endproc
+
+.macro Ai.switchFuncL func
+	.ifnblank func
+		.byte <(func-1)
+	.else
+		.byte <(Ai.dummy-1)
+	.endif
+.endmacro
+.macro Ai.switchFuncH func
+	.ifnblank func
+		.byte >(func-1)
+	.else
+		.byte >(Ai.dummy-1)
+	.endif
+.endmacro
+
+;to be employed by ai scripts y(in:ai event)
+.macro Ai.switch update,create,collision,damage,destroy
+	;.ifdef DEBUG
+	;	cpy #5
+	;	bcc @skip_brk_switchAI
+	;		tya
+	;		Debug.break #ERROR::FUNC_TABLE_INDEX,a
+	;	@skip_brk_switchAI:
+	;.endif
+	lda @funcsH,y
+	pha
+	lda @funcsL,y
+	pha
+	rts ;jump table
+	@funcsL:
+		Ai.switchFuncL update
+		Ai.switchFuncL create
+		Ai.switchFuncL collision
+		Ai.switchFuncL damage
+		Ai.switchFuncL destroy
+	@funcsH:
+		Ai.switchFuncH update
+		Ai.switchFuncH create
+		Ai.switchFuncH collision
+		Ai.switchFuncH damage
+		Ai.switchFuncH destroy
+.endmacro

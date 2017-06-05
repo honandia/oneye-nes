@@ -1,0 +1,378 @@
+.use Global,*
+.use Ppu
+.use Data.Tileset
+.use Data.Map
+.use Actor
+.use Game
+.use Ai
+
+BORDER_TILE = $2E
+
+WORLD_W = 4
+WORLD_H = 4
+MAP_W = 16
+MAP_H = 12
+
+collisionPointDx: .reszp 1
+collisionPointDy: .reszp 1
+collisionTileX: .reszp 1
+collisionTileY: .reszp 1
+map: .resbss 256
+worldIndex: .reszp 1
+
+
+.proc loadScreen ;worldIndex(in)
+	lda worldIndex
+	asl a
+	tay
+	lda Data.Map.LIST,y
+	sta load.addr
+	lda Data.Map.LIST+1,y
+	sta load.addr+1
+	jsrrts load
+.endproc
+
+.proc load
+	addr: .reszp 2 ;(in)
+	attributes: .resbss 1
+	tmpPx: .resbss 1
+	tmpPy: .resbss 1
+	tmpId: .resbss 1
+	
+	lda #20
+	sta Game.screenChangeTimer ;freeze actors for a bit after changing screen
+	lda #0
+	lda Ai.Hero.vx
+	lda Ai.Hero.vy
+	
+	jsr Actor.destroyAllButHero
+	
+	jsr Ppu.disableVideo
+	ldy #0
+	@loop:
+		lda (addr),y
+		sta map+$10,y
+		iny
+		cpy #MAP_W*MAP_H
+		bne @loop
+	ldy #MAP_W*MAP_H+16
+	lda #BORDER_TILE
+	;clear bottom and top
+	@fill:
+		sta map,y
+		iny
+		;cpy #240
+		cpy #16
+		bne @fill
+	
+	displayTiles:
+		Ppu.setAddr $2000
+		ldx #0
+		@loop:
+			@evenRow:
+				ldy map,x
+				lda Data.Tileset.TILE0,y
+				sta PPUDATA
+				lda Data.Tileset.TILE1,y
+				sta PPUDATA
+				inx
+				txa
+				and #$0F
+				bne @evenRow
+			txa
+			sec
+			sbc #16
+			tax
+			@oddRow:
+				ldy map,x
+				lda Data.Tileset.TILE2,y
+				sta PPUDATA
+				lda Data.Tileset.TILE3,y
+				sta PPUDATA
+				inx
+				txa
+				and #$0F
+				bne @oddRow
+			;cpx #MAP_W*MAP_H+16
+			cpx #240
+			bne @loop
+	
+	setAttributes:
+		Ppu.setAddr $23C0
+		ldx #0
+		@loop:
+			ldy map+$11,x
+			lda Data.Tileset.PALETTE,y
+			jsr @oraAttributes
+			ldy map+$10,x
+			lda Data.Tileset.PALETTE,y
+			jsr @oraAttributes
+			ldy map+1,x
+			lda Data.Tileset.PALETTE,y
+			jsr @oraAttributes
+			ldy map,x
+			lda Data.Tileset.PALETTE,y
+			jsr @oraAttributes
+			sta PPUDATA
+			inx
+			inx
+			txa
+			and #$0F
+			bne @loop
+			txa
+			clc
+			adc #16
+			tax
+			cmp #MAP_W*MAP_H+32
+			;cmp #MAP_W*MAP_H+40
+			bcc @loop
+		ldx #8
+		lda #$FF
+		@clearBottom:
+			sta PPUDATA
+			dex
+			bne @clearBottom
+			
+	lda #0
+	sta PPUSCROLL
+	sta PPUSCROLL
+	
+	jsr Ppu.enableVideo
+	
+	jmp spawnEnemies
+	
+	@oraAttributes:
+		asl attributes
+		asl attributes
+		ora attributes
+		sta attributes
+		rts
+		
+	spawnEnemies:
+		ldy #0
+		clc
+		adc16 addr,,#MAP_W*MAP_H
+		@loop:
+			;byte 0 - id
+				lda (addr),y
+				beq @end
+				sta tmpId
+				iny
+			;byte 1 - tx
+				lda (addr),y
+				asl a
+				asl a
+				asl a
+				asl a
+				clc
+				adc #8
+				sta tmpPx
+				iny
+			;byte 2 - ty
+				lda (addr),y
+				asl a
+				asl a
+				asl a
+				asl a
+				clc
+				adc #8+16
+				sta tmpPy
+				iny
+			tya
+			pha
+			Actor.createEnemy tmpId
+			lda tmpPx
+			sta Actor.px,x
+			lda tmpPy
+			sta Actor.py,x
+			pla
+			tay
+			jmp @loop
+		@end:
+		rts
+.endproc
+
+.macro getTileFlags dx, dy
+	lda dx
+	ldy dy
+	jsr _getTileFlags
+.endmacro
+.proc _getTileFlags ;x(in:actor index), a(in:dx),y(in:dy)
+	tmp: .reszp 1
+	sta collisionPointDx
+	sty collisionPointDy
+	;tx = (px+dx)/16
+		clc
+		adc Actor.px,x
+		lsr a
+		lsr a
+		lsr a
+		lsr a
+		sta tmp
+		asl a
+		asl a
+		asl a
+		asl a
+		sta collisionTileX
+	;ty*16 = int((py+dy)/16) * 16
+		tya
+		clc
+		adc Actor.py,x
+		and #$F0
+		sta collisionTileY
+	;map index
+		clc
+		adc tmp
+		tay
+	lda map,y
+	tay
+	lda Data.Tileset.FLAGS,y
+	rts
+.endproc
+
+.macro notSolid dx,dy
+	lda dx
+	ldy dy
+	jsr _notSolid
+.endmacro
+.proc _notSolid
+	jsr _getTileFlags
+	and #Data.Tileset.FLAG_SOLID
+	rts
+.endproc
+
+;collision points:
+POINT_A_X = 256-5
+POINT_A_Y = 0
+POINT_B_X = 5
+POINT_B_Y = 0
+POINT_C_X = 256-5
+POINT_C_Y = 7
+POINT_D_X = 5
+POINT_D_Y = 7
+
+EJECT_RIGHT = 16+5
+EJECT_LEFT = 6
+EJECT_DOWN = 16
+EJECT_UP = 8
+;A----B
+;|    |
+;|    |
+;C----D
+.proc doCollision ;x(in:actor index)
+	
+	lda Actor.vx,x
+	beq @skipHorizontal
+	bmi @left
+	@right: ;B,D
+		notSolid #POINT_B_X,#POINT_B_Y+1
+		bne @ejectLeft
+		notSolid #POINT_D_X,#POINT_D_Y-1
+		bne @ejectLeft
+		jmp @skipHorizontal
+	@left: ;A,C
+		notSolid #POINT_A_X,#POINT_A_Y+1
+		bne @ejectRight
+		notSolid #POINT_C_X,#POINT_C_Y-1
+		bne @ejectRight
+	@skipHorizontal:
+	
+	lda Actor.vy,x
+	beq @skipVertical
+	bmi @up
+	@down: ;C,D
+		notSolid #POINT_C_X,#POINT_C_Y
+		bne @ejectUp
+		notSolid #POINT_D_X,#POINT_D_Y
+		bne @ejectUp
+		jmp @skipVertical
+	@up: ;A,B
+		notSolid #POINT_A_X,#POINT_A_Y
+		bne @ejectDown
+		notSolid #POINT_B_X,#POINT_B_Y
+		bne @ejectDown
+	@skipVertical:
+	rts
+		
+	@ejectLeft:
+		lda collisionTileX
+		sec
+		sbc #EJECT_LEFT
+		sta Actor.px,x
+		lda #0
+		sta Actor.vx,x
+		jmp @skipHorizontal
+	@ejectRight:
+		lda collisionTileX
+		clc
+		adc #EJECT_RIGHT
+		sta Actor.px,x
+		lda #0
+		sta Actor.vx,x
+		jmp @skipHorizontal
+		
+	@ejectDown:
+		lda collisionTileY
+		clc
+		adc #EJECT_DOWN
+		sta Actor.py,x
+		lda #0
+		sta Actor.vy,x
+		jmp @skipVertical
+	@ejectUp:
+		lda collisionTileY
+		sec
+		sbc #EJECT_UP
+		sta Actor.py,x
+		lda #0
+		sta Actor.vy,x
+		jmp @skipVertical
+.endproc
+
+.macro setTile id,tx,ty
+	lda id
+	ldx tx
+	ldy ty
+	jsr _setTile
+.endmacro
+.proc _setTile
+	tmpTx: .resbss 1
+	tmpId: .resbss 1
+	;ppuAddr: .reszp 2
+	sta tmpId
+	stx tmpTx
+	;map index = tx + ty*MAP_W + MAP_W
+		tya
+		asl a
+		asl a
+		asl a
+		asl a
+		clc
+		adc tmpTx
+		adc #MAP_W
+		tax
+	stx $FF
+	
+	lda tmpId
+	sta map,x
+	
+	;ppu addr = $2000 + ty*64 + tx*2
+	;	lda #0
+	;	sta ppuAddr+1
+	;	tya
+	;	sta ppuAddr
+	;	.repeat 6
+	;		asl a
+	;		rol ppuAddr+1
+	;	.endrepeat
+	;	;sta ppuAddr
+	;	asl tmpTx
+	;	clc
+	;	adc tmpTx
+	;	lda ppuAddr+1
+	;	adc #$20
+	;	sta ppuAddr+1
+	
+	;Ppu.setAddr ppuAddr
+	rts
+.endproc

@@ -1,0 +1,33 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+
+attachedTo = Actor.var0
+verticalOffset = Actor.var1
+
+
+.proc run
+	Ai.switch update,create
+	rts
+.endproc
+
+.proc update
+	ldy attachedTo,x
+	bmi @end
+		lda Actor.px,y
+		sta Actor.px,x
+		lda Actor.py,y
+		clc
+		adc verticalOffset,x
+		sta Actor.py,x
+	@end:
+	rts
+.endproc
+
+create:
+	lda #$FF
+	sta attachedTo,x
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	Actor.setAnimation Data.Animation.SHADOW_FLICKER
+	rts

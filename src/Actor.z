@@ -1,0 +1,570 @@
+.use Global,*
+.use Data.Actor
+.use Data.Animation
+.use Map
+.use Ai
+.use Game
+
+INDEX_HERO = 0
+INDEX_WEAPON = 1
+DIRECTION_LEFT = 0
+DIRECTION_UP = 1
+DIRECTION_RIGHT = 2
+DIRECTION_DOWN = 3
+.enum FLAG
+	;palette bits: 0,1
+	NO_MAP_COLLISION = $04
+.endenum
+
+INVINCIBILITY_TIME = 8
+
+
+MAX_ACTORS = 16
+PARTICLE_INDEX_START = 2
+MAX_PARTICLES = 4
+ENEMY_INDEX_START = 2+MAX_PARTICLES
+
+oamIndex: .reszp 1
+
+id: .resbss MAX_ACTORS
+px: .resbss MAX_ACTORS
+py: .resbss MAX_ACTORS
+vx: .resbss MAX_ACTORS
+vy: .resbss MAX_ACTORS
+hp: .resbss MAX_ACTORS
+timer: .resbss MAX_ACTORS
+flags: .resbss MAX_ACTORS
+invincibility: .resbss MAX_ACTORS
+lostControl: .resbss MAX_ACTORS
+animationAddrL: .resbss MAX_ACTORS
+animationAddrH: .resbss MAX_ACTORS
+animationIndex: .resbss MAX_ACTORS
+animationFrame: .resbss MAX_ACTORS
+direction: .resbss MAX_ACTORS
+var0: .resbss MAX_ACTORS
+var1: .resbss MAX_ACTORS
+var2: .resbss MAX_ACTORS
+
+.macro setFlags f
+	lda Actor.flags,x
+	ora #(f)
+	sta Actor.flags,x
+.endmacro
+
+.macro clearFlags f
+	lda Actor.flags,x
+	and #~(f)
+	sta Actor.flags,x
+.endmacro
+
+.macro notFlags f
+	lda Actor.flags,x
+	and #(f)
+.endmacro
+
+.macro createX _id
+	lda _id
+	jsr _createX
+.endmacro
+.proc _createX ;x(in:sprite index)
+	sta Actor.id,x
+	tay
+	lda Data.Actor.HP,y
+	sta Actor.hp,x
+	lda Data.Actor.PALETTE,y
+	sta Actor.flags,x
+	lda #0
+	sta Actor.timer,x
+	sta Actor.invincibility,x
+	sta Actor.px,x
+	sta Actor.py,x
+	sta Actor.vx,x
+	sta Actor.vy,x
+	sta Actor.animationAddrH,x
+	sta Actor.animationIndex,x
+	Ai.call #Ai.EVENT::CREATE
+	rts
+.endproc
+
+.macro createEnemy _id
+	lda _id
+	jsr _createEnemy
+.endmacro
+.proc _createEnemy ;x(out:new actor index)
+	tmp: .reszp 1
+	sta tmp
+	ldx #ENEMY_INDEX_START
+	@loop:
+		lda Actor.id,x
+		bne @continue
+			lda tmp
+			jsrrts _createX
+		@continue:
+		inx
+		cpx #MAX_ACTORS
+		bne @loop
+	rts
+.endproc
+
+.macro createParticle _id
+	lda _id
+	jsr _createParticle
+.endmacro
+.proc _createParticle ;x(out:new actor index)
+	tmp: .reszp 1
+	sta tmp
+	ldx #PARTICLE_INDEX_START
+	@loop:
+		lda Actor.id,x
+		bne @continue
+			lda tmp
+			jsrrts _createX
+		@continue:
+		inx
+		cpx #PARTICLE_INDEX_START+MAX_PARTICLES
+		bne @loop
+	rts
+.endproc
+
+.proc knockback ;a/vy(in:opposite direction x/y)
+	_vy = tmp1
+	sta Actor.vx,x
+	lda _vy
+	sta Actor.vy,x
+	lda #10
+	sta Actor.lostControl,x
+	rts
+.endproc
+.proc knockbackY ;a/x(in:opposite direction x/y)
+	_vy = tmp1
+	sta Actor.vx,y
+	lda _vy
+	sta Actor.vy,y
+	lda #10
+	sta Actor.lostControl,y
+	rts
+.endproc
+;义
+
+.proc damage ;a(in:amount)
+	amount: .resbss 1
+	sta amount
+	lda Actor.invincibility,x
+	bne @end	
+	lda amount
+	sta Ai.arg0
+	Ai.call #Ai.EVENT::DAMAGE
+	lda Ai.result
+	cmp #Ai.RESULT::DAMAGED
+	beq @damaged
+	cmp #Ai.RESULT::DAMAGED_NO_KNOCKBACK
+	beq @damaged
+		@end:
+		rts
+	@damaged:
+		lda #INVINCIBILITY_TIME
+		sta Actor.invincibility,x
+		rts
+	
+;	lda Actor.hp,x
+;	sec
+;	sbc amount
+;	sta Actor.hp,x
+;	beq @destroy
+;	bmi @destroy
+;	@end:
+;	rts
+;	@destroy:
+;		jsr createExplosion
+;		jsrrts destroy
+.endproc
+
+.proc damageY ;a(in:amount)
+	tmpX: .resbss 1
+	tmpY: .resbss 1
+	sty tmpY
+	stx tmpX
+	ldx tmpY
+	jsr damage
+	ldx tmpX
+	ldy tmpY
+	rts
+.endproc
+
+.proc createExplosion
+	tmpX: .resbss 1
+	lda Actor.px,x
+	pha
+	lda Actor.py,x
+	pha
+	stx tmpX
+	Actor.createParticle #Data.Actor.ID_EXPLOSION
+	Actor.setAnimation Data.Animation.EXPLOSION
+	pla
+	sta Actor.py,x
+	pla
+	sta Actor.px,x
+	ldx tmpX
+	rts
+.endproc
+
+.macro setPalette pal
+	lda Actor.flags,x
+	and #%11111100
+	ora pal
+	sta Actor.flags,x
+.endmacro
+
+.macro setAnimation addr
+	lda #<addr
+	ldy #>addr
+	jsr _setAnimation
+.endmacro
+.proc _setAnimation
+	tmp: .reszp 1
+	sta tmp
+	cmp Actor.animationAddrL,x
+	bne @set
+	tya
+	cmp Actor.animationAddrH,x
+	beq @end
+	@set:
+		tya
+		sta Actor.animationAddrH,x
+		lda tmp
+		sta Actor.animationAddrL,x
+		lda #0
+		sta Actor.animationIndex,x
+	@end:
+	rts
+.endproc
+
+.proc destroy
+	lda Actor.id,x
+	beq @end
+		Ai.call #Ai.EVENT::DESTROY
+		lda #0
+		sta Actor.id,x
+	@end:
+	rts
+.endproc
+.proc destroyY
+	tmpX: .resbss 1
+	tmpY: .resbss 1
+	sty tmpY
+	stx tmpX
+	ldx tmpY
+	jsr destroy
+	ldx tmpX
+	ldy tmpY
+	rts
+.endproc
+
+.proc destroyAllButHero
+	ldx #INDEX_HERO+1
+	@loop:
+		jsr destroy
+		inx
+		cpx #MAX_ACTORS
+		bne @loop
+	rts
+.endproc
+
+.proc updateAnimation
+	tmp: .reszp 1
+	animationAddr: .reszp 2
+	lda Actor.animationAddrH,x
+	beq @end
+		sta animationAddr+1
+		lda Actor.animationAddrL,x
+		sta animationAddr
+		@again:
+		ldy Actor.animationIndex,x
+		tya
+		lda (animationAddr),y
+		bpl @skipRewind
+			clc
+			adc Actor.animationIndex,x
+			sta Actor.animationIndex,x
+			jmp @again
+		@skipRewind:
+		sta Actor.animationFrame,x
+		inc Actor.animationIndex,x
+	@end:
+	rts
+.endproc
+
+.proc updateAll
+	lda #0
+	sta oamIndex
+	ldx #MAX_ACTORS-1
+	@loop:
+		lda Actor.id,x
+		beq @continue
+			lda Game.screenChangeTimer
+			bne @display
+				lda Actor.lostControl,x
+				bne @skipAi
+					Ai.call #Ai.EVENT::UPDATE
+					;ai can destroy actor, so check for id again
+					lda Actor.id,x
+					beq @continue
+				@skipAi:
+				jsr updatePhysics
+				lda Actor.flags,x
+				and #FLAG::NO_MAP_COLLISION
+				bne @skipMapCollision
+					jsr Map.doCollision
+				@skipMapCollision:
+				cpx #INDEX_WEAPON+1
+				bcs @skipEnemyCollisions
+					jsr doEnemyCollisions
+				@skipEnemyCollisions:
+				
+				lda Actor.invincibility,x
+				beq @skipInvincibilityTimer
+					dec Actor.invincibility,x
+				@skipInvincibilityTimer:
+				lda Actor.lostControl,x
+				beq @skipLostControlTimer
+					dec Actor.lostControl,x
+				@skipLostControlTimer:
+			@display:
+			jsr updateAnimation
+			jsr writeOam
+		@continue:
+		dex
+		bpl @loop
+		
+	ldx oamIndex
+	lda #$FF
+	@fillOam:
+		sta oam,x
+		inx
+		bne @fillOam
+	@end:
+	rts
+.endproc
+
+.proc doEnemyCollisions
+	ldy #ENEMY_INDEX_START
+	@loop:
+		lda Actor.id,y
+		beq @continue
+			lda Actor.px,x
+			clc
+			adc #8
+			sec
+			sbc Actor.px,y
+			cmp #16
+			bcs @continue
+			
+			lda Actor.py,x
+			clc
+			adc #8
+			sec
+			sbc Actor.py,y
+			cmp #16
+			bcs @continue
+			
+			sty Ai.arg0
+			Ai.call #Ai.EVENT::COLLIDE
+			ldy Ai.arg0
+			rts
+		@continue:
+		iny
+		cpy #MAX_ACTORS
+		bne @loop
+	rts
+.endproc
+
+.proc updatePhysics
+	lda Actor.px,x
+	clc
+	adc Actor.vx,x
+	sta Actor.px,x
+	
+	lda Actor.py,x
+	clc
+	adc Actor.vy,x
+	sta Actor.py,x
+	rts
+.endproc
+
+.proc writeOam
+	gfxAddr: .reszp 2
+	tmpX: .reszp 1
+	tmpY: .reszp 1
+	tmpPx: .reszp 1
+	tileIndex: .reszp 1
+	attributes: .reszp 1
+	animationAddr: .reszp 2
+	tileXAddr: .reszp 2
+	tileYAddr: .reszp 2	
+	
+	lda Actor.invincibility,x
+	lsr a
+	and #1
+	beq @continue
+		rts
+	@continue:
+	
+	ldy Actor.id,x
+	lda Data.Actor.SIZE,y
+	bne write16x16
+	
+	write8x8:
+		lda Actor.flags,x
+		and #$03
+		sta attributes
+		
+		;gfxAddr = GFX + animationIndex*1
+			lda Actor.id,x
+			asl a
+			tay
+			lda Actor.animationFrame,x
+			and #$3F
+			clc
+			adc Data.Actor.GFX,y
+			sta gfxAddr
+			lda Data.Actor.GFX+1,y
+			adc #0
+			sta gfxAddr+1
+			
+		lda #256-4
+		clc
+		adc Actor.px,x
+		sta tmpPx
+		
+		ldy #0
+		lda (gfxAddr),y
+		sta tileIndex
+		
+		lda #256-4 - 1
+		clc
+		adc Actor.py,x
+		jsrrts writeTile
+		
+	write16x16:
+		lda Actor.animationFrame,x
+		and #$40
+		bne @hflip
+		@noFlip:
+			lda #<TILE_X
+			sta tileXAddr
+			lda #>TILE_X
+			sta tileXAddr+1
+			lda #<TILE_Y
+			sta tileYAddr
+			lda #>TILE_Y
+			sta tileYAddr+1
+			lda Actor.flags,x
+			and #$03
+			sta attributes
+			jmp @skipFlip
+		@hflip:
+			lda #<TILE_X_HFLIP
+			sta tileXAddr
+			lda #>TILE_X_HFLIP
+			sta tileXAddr+1
+			lda #<TILE_Y_HFLIP
+			sta tileYAddr
+			lda #>TILE_Y_HFLIP
+			sta tileYAddr+1
+			lda Actor.flags,x
+			and #$03
+			ora #%01000000
+			sta attributes
+		@skipFlip:
+		
+		;gfxAddr = GFX + animationIndex*4
+			lda Actor.id,x
+			asl a
+			tay
+			lda Actor.animationFrame,x
+			and #$3F
+			asl a
+			asl a
+			clc
+			adc Data.Actor.GFX,y
+			sta gfxAddr
+			lda Data.Actor.GFX+1,y
+			adc #0
+			sta gfxAddr+1
+			
+		ldy #0
+		@loopThroughTiles:
+			lda (tileXAddr),y
+			clc
+			adc Actor.px,x
+			sta tmpPx
+			
+			sty tmpY
+			ldy #0
+			lda (gfxAddr),y
+			inc16 gfxAddr
+			sta tileIndex
+			ldy tmpY
+			
+			lda (tileYAddr),y
+			clc
+			adc Actor.py,x
+			sec
+			sbc #1
+			jsr writeTile
+			
+			iny
+			cpy #4
+			bne @loopThroughTiles
+		rts
+			
+		TILE_X: .byte 256-8,0,256-8,0
+		TILE_Y: .byte 256-8,256-8,0,0
+		TILE_X_HFLIP: .byte 0,256-8,0,256-8
+		TILE_Y_HFLIP: .byte 256-8,256-8,0,0
+	
+		
+	writeTile: ;a(in:py)
+		stx tmpX
+		ldx oamIndex
+		;byte 0 - y
+			sta oam,x
+			inx
+		;byte 1 - tile index
+			lda tileIndex
+			sta oam,x
+			inx
+		;byte 2 - attributes
+			lda attributes
+			sta oam,x
+			inx
+		;byte 3 - x
+			lda tmpPx
+			sta oam,x
+			inx
+		stx oamIndex
+		ldx tmpX
+		rts
+.endproc
+
+
+.proc getTx
+	lda Actor.px,x
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	rts
+.endproc
+
+.proc getTy
+	lda Actor.py,x
+	sec
+	sbc #16
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	rts
+.endproc
+
