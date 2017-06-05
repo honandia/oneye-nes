@@ -1,0 +1,1 @@
+Ai.Util Ai.Shadow Ai.Bird Ai.Hero Map Ai.GorillaHand Screen Ai.Minotaur Ai.Explosion Game Ai.Bananarang Data.Actor Ai.Ghost Ai.Powerup Vblank Actor Ai.Beholder Ai.Blob Ai Ai.GorillaHead Global Ppu Ai.BeholderProjectile
