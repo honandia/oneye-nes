@@ -1,0 +1,94 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+.use Data.Actor
+
+state = Actor.var0
+shadowIndex = Actor.var1
+STATE_IDLE = 0
+STATE_ATTACK = 2
+STATE_TAKEOFF = 1
+
+.proc run
+	Ai.switch update,create,,damage,destroy
+	rts
+.endproc
+
+.proc update
+	;tmpPx = tmp1
+	;tmpPy = tmp2
+	;tmpX = tmp3
+	lda state,x
+	cmp #STATE_TAKEOFF
+	beq takeoff
+	cmp #STATE_ATTACK
+	beq attack
+	idle:
+		jsr Ai.Util.getDistanceFromHero
+		cmp #$50
+		bcs @end
+			Ai.Util.createShadow #4
+			tya
+			sta shadowIndex,x
+			
+			lda #STATE_TAKEOFF
+			sta state,x
+			Actor.setAnimation Data.Animation.BIRD_FLY_LEFT
+			lda #20
+			sta Actor.timer,x
+			lda #256-1
+			sta Actor.vy,x
+		@end:
+		rts
+	takeoff:
+		ldy shadowIndex,x
+		lda #24
+		sec
+		sbc Actor.timer,x
+		sta Ai.Shadow.verticalOffset,y
+		
+		dec Actor.timer,x
+		bne @end
+			lda #STATE_ATTACK
+			sta state,x
+		@end:
+		rts
+	attack:
+		Ai.Util.moveTowardsHero #1
+		lda Actor.direction,x
+		cmp #Actor.DIRECTION_RIGHT
+		beq @right
+		@left:
+			Actor.setAnimation Data.Animation.BIRD_FLY_LEFT
+			rts
+		@right:
+			Actor.setAnimation Data.Animation.BIRD_FLY_RIGHT
+			rts
+.endproc
+
+create:
+	lda #STATE_IDLE
+	sta state,x
+	lda #$FF
+	sta shadowIndex,x
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	Actor.setAnimation Data.Animation.BIRD_IDLE
+	rts
+	
+damage:
+	lda Ai.arg0
+	jsrrts Ai.Util.damage
+
+destroy:
+	txa
+	pha
+	lda shadowIndex,x
+	bmi @end
+		tax
+		jsr Actor.destroy
+	@end:
+	pla
+	tax
+	rts
+	

@@ -1,0 +1,446 @@
+.use Global,*
+.use Map
+.use Actor
+.use Vblank
+.use Ppu
+.use Game
+.use Ai
+.use Data.Actor
+.use Screen
+
+powerup1Collected: .resbss 1 ;sequential
+powerup2Collected: .resbss 1 ;...
+powerup3Collected: .resbss 1 ;...
+bananarangTx: .resbss 1
+bananarangTy: .resbss 1
+heroTx: .resbss 1
+heroTy: .resbss 1
+
+.macro bananarangTouches tx,ty
+	lda bananarangTx
+	cmp tx
+	bne :+
+	lda bananarangTy
+	cmp ty
+	:
+.endmacro
+
+.macro heroTouches tx,ty
+	lda heroTx
+	cmp tx
+	bne :+
+	lda heroTy
+	cmp ty
+	:
+.endmacro
+
+update:
+	lda #$FF
+	sta bananarangTx
+	sta bananarangTy
+	ldx #Actor.INDEX_WEAPON
+	lda Actor.id,x
+	beq @skipBananarang
+		jsr Actor.getTx
+		sta bananarangTx
+		jsr Actor.getTy
+		sta bananarangTy
+	@skipBananarang:
+	
+	lda #$FF
+	sta heroTx
+	sta heroTy
+	ldx #Actor.INDEX_HERO
+	lda Actor.id,x
+	beq @skipHero
+		jsr Actor.getTx
+		sta heroTx
+		jsr Actor.getTy
+		sta heroTy
+	@skipHero:
+	
+	lda Map.worldIndex
+	cmp #0 + 0*4
+	bne :+
+		jmp M00
+	:
+	lda Map.worldIndex
+	cmp #2 + 0*4
+	bne :+
+		jmp M20
+	:
+	cmp #3 + 0*4
+	bne :+
+		jmp M30
+	:
+	cmp #0 + 1*4
+	bne :+
+		jmp M01
+	:
+	cmp #1 + 1*4
+	bne :+
+		jmp M11
+	:
+	cmp #0 + 3*4 ;bottom left
+	bne :+
+		jmp M03
+	:
+	cmp #1 + 4*4 ;dungeon 1
+	bne :+
+		jmp M14
+	:
+	cmp #2 + 4*4 ;dungeon 2
+	bne :+
+		jmp M24
+	:
+	cmp #3 + 4*4 ;dungeon 3
+	bne :+
+		jmp M34
+	:
+	rts
+	
+M00:
+	heroTouches #5,#4
+	bne @end
+		lda #1 + 4*4
+		jsr enterDungeon
+	@end:
+	rts
+	
+M20:
+	bananarangTouches #11,#5
+	bne @end
+	@makeBridge:
+		ldx #Actor.INDEX_WEAPON
+		jsr Actor.destroy
+		
+		jsr Vblank.wait4
+		Vblank.cmd.replace @bridge1
+		Map.setTile #0, #9,#5
+		Map.setTile #0, #9,#6
+		Map.setTile #0, #8,#5
+		Map.setTile #0, #8,#6
+		jsr Vblank.wait4
+		Vblank.cmd.replace @bridge2
+	@end:
+	rts
+	@bridge1:
+		Ppu.setAddr $2196
+		jsr writePressedButtonTop
+		Ppu.setAddr $21B6
+		jsr writePressedButtonBottom
+		Ppu.setAddr $2190
+		jsr writeHorizontalBridgeTop1
+		Ppu.setAddr $21B0
+		jsr writeHorizontalBridgeBottom1
+		Ppu.setAddr $21D0
+		jsr writeHorizontalBridgeTop2
+		Ppu.setAddr $21F0
+		jsr writeHorizontalBridgeBottom2
+		jsrrts Vblank.cmd.end
+	@bridge2:
+		Ppu.setAddr $2192
+		jsr writeHorizontalBridgeTop1
+		Ppu.setAddr $21B2
+		jsr writeHorizontalBridgeBottom1
+		Ppu.setAddr $21D2
+		jsr writeHorizontalBridgeTop2
+		Ppu.setAddr $21F2
+		jsr writeHorizontalBridgeBottom2
+		jsrrts Vblank.cmd.end
+	rts
+
+M30:
+	heroTouches #11,#4
+	bne @end
+		lda #3 + 4*4
+		jsr enterDungeon
+	@end:
+	rts
+	
+M01:
+	heroTouches #5,#5
+	bne @skipDungeonWarp
+		lda #2 + 4*4
+		jsrrts enterDungeon
+	@skipDungeonWarp:
+	
+	bananarangTouches #6,#8
+	bne @end
+	@makeBridge:
+		ldx #Actor.INDEX_WEAPON
+		jsr Actor.destroy
+		
+		jsr Vblank.wait4
+		Vblank.cmd.replace @bridge1
+		Map.setTile #0, #4,#10
+		Map.setTile #0, #5,#10
+	@end:
+	rts
+	@bridge1:
+		Ppu.setAddr $224C
+		jsr writePressedButtonTop
+		Ppu.setAddr $226C
+		jsr writePressedButtonBottom
+		Ppu.setAddr $22C8
+		jsr writeVerticalBridgeRow
+		Ppu.setAddr $22E8
+		jsr writeVerticalBridgeRow
+		jsrrts Vblank.cmd.end
+	
+
+M11:
+	bananarangTouches #10,#4
+	bne @end
+	@makeBridge:
+		ldx #Actor.INDEX_WEAPON
+		jsr Actor.destroy
+		
+		jsr Vblank.wait4
+		Vblank.cmd.replace @bridge1
+		Map.setTile #0, #9,#8
+		Map.setTile #0, #10,#8
+		jsr Vblank.wait4
+		Vblank.cmd.replace @bridge2
+		Map.setTile #0, #9,#7
+		Map.setTile #0, #10,#7
+		jsr Vblank.wait4
+		;jsr Vblank.wait4
+		;Vblank.cmd.replace @bridge3
+		;Map.setTile #0, #9,#3
+		;Map.setTile #0, #10,#3
+		;jsr Vblank.wait4
+		Vblank.cmd.replace @bridge4
+		Map.setTile #0, #9,#2
+		Map.setTile #0, #10,#2
+	@end:
+	rts
+	@bridge1:
+		Ppu.setAddr $2154
+		jsr writePressedButtonTop
+		Ppu.setAddr $2174
+		jsr writePressedButtonBottom
+		Ppu.setAddr $2A52
+		jsr writeVerticalBridgeRow
+		Ppu.setAddr $2A72
+		jsr writeVerticalBridgeRow
+		jsrrts Vblank.cmd.end
+	@bridge2:
+		Ppu.setAddr $2A12
+		jsr writeVerticalBridgeRow
+		Ppu.setAddr $2A32
+		jsr writeVerticalBridgeRow
+		jsrrts Vblank.cmd.end
+	;@bridge3:
+	;	Ppu.setAddr $2912
+	;	jsr writeVerticalBridgeRow
+	;	Ppu.setAddr $2932
+	;	jsr writeVerticalBridgeRow
+	;	jsrrts Vblank.cmd.end
+	@bridge4:
+		Ppu.setAddr $28D2
+		jsr writeVerticalBridgeRow
+		Ppu.setAddr $28F2
+		jsr writeVerticalBridgeRow
+		jsrrts Vblank.cmd.end
+
+	
+	
+M03:
+	bananarangTouches #4,#1
+	bne @end
+	@makeBridge:
+		ldx #Actor.INDEX_WEAPON
+		jsr Actor.destroy
+		
+		jsr Vblank.wait4
+		Vblank.cmd.replace @bridge1
+		Map.setTile #0, #5,#4
+		Map.setTile #0, #6,#4
+		jsr Vblank.wait4
+		Vblank.cmd.replace @bridge2
+		Map.setTile #0, #5,#3
+		Map.setTile #0, #6,#3
+	@end:
+	rts
+	@bridge1:
+		Ppu.setAddr $2888
+		jsr writePressedButtonTop
+		Ppu.setAddr $28A8
+		jsr writePressedButtonBottom
+		Ppu.setAddr $214A
+		jsr writeVerticalBridgeRow
+		Ppu.setAddr $216A
+		jsr writeVerticalBridgeRow
+		jsrrts Vblank.cmd.end
+	@bridge2:
+		Ppu.setAddr $210A
+		jsr writeVerticalBridgeRow
+		Ppu.setAddr $212A
+		jsr writeVerticalBridgeRow
+		jsrrts Vblank.cmd.end
+
+writePressedButtonTop:
+	ldy #$90
+	sty PPUDATA
+	iny
+	sty PPUDATA
+	rts
+writePressedButtonBottom:
+	ldy #$A0
+	sty PPUDATA
+	iny
+	sty PPUDATA
+	rts
+	
+writeVerticalBridgeRow:
+	ldy #$A4
+	sty PPUDATA
+	iny
+	sty PPUDATA
+	sty PPUDATA
+	iny
+	sty PPUDATA
+	rts
+
+writeHorizontalBridgeTop1:
+	lda #$74
+	sta PPUDATA
+	sta PPUDATA
+	rts
+writeHorizontalBridgeBottom1:
+writeHorizontalBridgeTop2:
+	lda #$84
+	sta PPUDATA
+	sta PPUDATA
+	rts
+writeHorizontalBridgeBottom2:
+	lda #$94
+	sta PPUDATA
+	sta PPUDATA
+	rts
+	
+
+M14: ;dungeon 3
+	heroTouches #7,#9
+	beq @leave
+	heroTouches #8,#9
+	bne @end
+	@leave:
+		lda #5*16+8
+		sta Ai.Hero.px
+		lda #4*16+8+16
+		sta Ai.Hero.py
+		lda #0 + 0*4
+		jsr leaveDungeon
+	@end:
+	rts
+	
+M24: ;dungeon 2
+	heroTouches #7,#9
+	beq @leave
+	heroTouches #8,#9
+	bne @end
+	@leave:
+		lda #5*16+8
+		sta Ai.Hero.px
+		lda #5*16+8+16
+		sta Ai.Hero.py
+		lda #0 + 1*4
+		jsr leaveDungeon
+	@end:
+	rts
+	
+M34: ;dungeon 1
+	heroTouches #7,#9
+	beq @leave
+	heroTouches #8,#9
+	bne @end
+	@leave:
+		lda #11*16+8
+		sta Ai.Hero.px
+		lda #4*16+8+16
+		sta Ai.Hero.py
+		lda #3 + 0*4
+		jsr leaveDungeon
+	@end:
+	rts
+
+
+enterDungeon: ;a(in)
+	tay
+	lda joy1
+	and #JOY_UP
+	beq @end
+		sty Map.worldIndex
+		jsr Ppu.disableVideo
+		Game.loadPalette_VBL Game.PALETTE_DUNGEON
+		jsr Ppu.enableVideo
+		jsr Map.loadScreen
+		lda #128
+		sta Ai.Hero.px
+		lda #154
+		sta Ai.Hero.py
+		
+		jsr getDungeonNumber
+		tay
+		lda powerup1Collected,y
+		bne @end
+			Actor.createEnemy #Data.Actor.ID_POWERUP
+			lda #6*16 + 8 + 16
+			sta Actor.py,x
+			lda #128
+			sta Actor.px,x
+	@end:
+	rts
+
+leaveDungeon:
+	sta Map.worldIndex
+	jsr Ppu.disableVideo
+	Game.loadPalette_VBL Game.PALETTE
+	jsr Ppu.enableVideo
+	jsr Map.loadScreen
+	rts
+	
+getDungeonNumber:
+	lda Map.worldIndex
+	cmp #1 + 4*4
+	beq @r2
+	cmp #2 + 4*4
+	beq @r1
+	lda #0
+	rts
+	@r1:
+		lda #1
+		rts
+	@r2:
+		lda #2
+		rts
+		
+collectPowerup:
+	jsr getDungeonNumber
+	tay
+	lda #1
+	sta powerup1Collected,y
+	inc Game.bananarangSpeed
+	inc Game.bananarangPower
+	
+	;on 3rd power up, end game
+	lda powerup3Collected
+	beq @end
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsr Vblank.wait4
+		jsrrts Screen.Ending.load
+	@end:
+	rts
+	

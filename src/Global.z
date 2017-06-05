@@ -1,0 +1,340 @@
+PPUCTRL = $2000
+PPUMASK = $2001
+PPUSTATUS = $2002
+OAMADDR = $2003
+OAMDATA = $2004
+PPUSCROLL = $2005
+PPUADDR = $2006
+PPUDATA = $2007
+
+.enum PPUCTRL	
+	ADDR_INCREMENT32 = %00000100
+	SPRITE_ADDR_1000 = %00001000
+	BG_ADDR_1000 = %00010000
+	SPRITE_SIZE_8x16 = %00100000
+	NMI_ENABLED = %10000000
+.endenum
+
+JOY_RIGHT 	= $01
+JOY_LEFT	= $02
+JOY_DOWN 	= $04
+JOY_UP	 	= $08
+JOY_START	= $10
+JOY_SELECT	= $20
+JOY_B		= $40
+JOY_A		= $80
+
+.segment "OAM"
+oam: .res 256
+
+.segment "ZEROPAGE"
+;tmp0-tmp9 and tmp10-tmp19 should be used in the main loop only
+tmp0: .res 1
+tmp1: .res 1
+tmp2: .res 1
+tmp3: .res 1
+tmp4: .res 1
+tmp5: .res 1
+tmp6: .res 1
+tmp7: .res 1
+tmp8: .res 1
+tmp9: .res 1
+
+frameCount: .res 2
+joy1: .res 1
+joy1Press: .res 1
+joy1Release: .res 1
+joy1Prev: .res 1
+joy2: .res 1
+joy2Press: .res 1
+joy2Release: .res 1
+joy2Prev: .res 1
+
+
+
+.macro jsrrts addr
+	jmp addr
+.endmacro
+
+
+.macro mul8yne n ;a(out:result), y (n*y) !=0
+	lda #0
+	clc
+:	adc n
+	dey
+	bne :-
+.endmacro
+
+.macro mul8y n ;a(out:result),y
+	lda #0
+	cpy #0
+	beq :++
+	clc
+:	adc n
+	dey
+	bne :-
+	:
+.endmacro
+
+.macro div16 lb,hb,n ;y(out:result), lb and hb not preserved
+	ldy #0
+:
+	lda lb
+	sec
+	sbc n
+	sta lb
+	lda hb
+	sbc #0
+	bmi :+
+	sta hb
+	iny
+	bne :- ;guaranteed branch unless overflow occurs
+:
+.endmacro
+
+.macro inc16 lb, hb ;a,c
+	.ifblank hb  ;pointer to low byte... followed by high byte
+		inc lb
+		bne :+
+			inc lb+1
+		:
+	.else ;two (separate low and high) bytes specified
+		inc lb
+		bne :+
+			inc hb
+		:
+	.endif
+.endmacro
+
+.macro inc16x lb, hb ;a,carry
+	.ifblank hb
+		inc lb,x
+		bne :+
+			inc lb+1,x
+		:
+	.else ;two (separate low and high) bytes specified
+		inc lb,x
+		bne :+
+			inc hb,x
+		:
+	.endif
+.endmacro
+
+;add 8-bit value to 16-bit variable
+.macro adc16 lb, hb, n, ldest, hdest ;a,carry
+	.if .match({n}, `x) 
+		txa
+	.elseif .match({n}, `y)
+		tya
+	.elseif .match({n}, `a)
+	.else
+		lda n
+	.endif
+	adc lb
+	.ifblank ldest
+		sta lb
+	.else
+		sta ldest
+	.endif
+	.ifblank hb
+		lda lb+1
+		adc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta lb+1
+		.endif
+	.else
+		lda hb
+		adc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta hb
+		.endif
+	.endif
+.endmacro
+
+
+.macro adc16x lb, hb, n, ldest, hdest ;a,carry
+	.if .match({n}, y)
+		tya
+	.elseif .match({n}, a)
+	.else
+		lda n
+	.endif
+	adc lb,x
+	.ifblank ldest
+		sta lb,x
+	.else
+		sta ldest
+	.endif
+	.ifblank hb
+		lda lb+1,x
+		adc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta lb+1,x
+		.endif
+	.else
+		lda hb,x
+		adc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta hb,x
+		.endif
+	.endif
+.endmacro
+
+
+.macro sbc16 lb,hb, n, ldest,hdest ;a,carry
+	lda lb
+	sbc n
+	.ifblank ldest
+		sta lb
+	.else
+		sta ldest
+	.endif
+	.ifblank hb
+		lda lb+1
+		sbc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta lb+1
+		.endif
+	.else
+		lda hb
+		sbc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta hb
+		.endif
+	.endif
+.endmacro
+
+.macro sbc16y lb,hb, n, ldest,hdest ;a,carry
+	lda lb,y
+	sbc n
+	.ifblank ldest
+		sta lb,y
+	.else
+		sta ldest
+	.endif
+	.ifblank hb
+		lda lb+1,y
+		sbc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta lb+1,y
+		.endif
+	.else
+		lda hb,y
+		sbc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta hb,y
+		.endif
+	.endif
+.endmacro
+
+.macro sbc16x lb,hb, n, ldest,hdest ;a,carry
+	lda lb,x
+	sbc n
+	.ifblank ldest
+		sta lb,x
+	.else
+		sta ldest
+	.endif
+	.ifblank hb
+		lda lb+1,x
+		sbc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta lb+1,x
+		.endif
+	.else
+		lda hb,x
+		sbc #$00
+		.ifnblank hdest
+			sta hdest
+		.elseif .not(.blank(ldest))
+			sta ldest+1
+		.else
+			sta hb,x
+		.endif
+	.endif
+.endmacro
+
+.macro limit16lower lb,hb,ln,hn
+.scope
+	lda hb
+	cmp hn
+	bcc @limit
+	bne @end
+	lda lb
+	cmp ln
+	bcs @end
+	@limit:
+		lda hn
+		sta hb
+		lda ln
+		sta lb
+	@end:
+.endscope
+.endmacro
+
+.macro limit16upper lb,hb,ln,hn
+.scope
+	lda hb
+	cmp hn
+	bcc @end
+	bne @limit
+	lda lb
+	cmp ln
+	bcc @end
+	@limit:
+		lda hn
+		sta hb
+		lda ln
+		sta lb
+	@end:
+.endscope
+.endmacro
+
+.macro abs n
+	.if .match({n}, a)
+		cmp #0
+	.else
+		lda n
+	.endif
+	bpl :+
+		eor #$FF
+		sec
+		adc #0
+	:
+.endmacro

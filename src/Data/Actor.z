@@ -1,0 +1,118 @@
+.use Ai
+
+ID_NONE = 0
+ID_HERO = 1
+ID_BANANARANG = 2
+ID_MINOTAUR = 3
+ID_EXPLOSION = 4
+ID_BEHOLDER = 5
+ID_BIRD = 6
+ID_BLOB = 7
+ID_GHOST = 8
+ID_SHADOW = 9
+ID_BEHOLDER_PROJECTILE = 10
+ID_POWERUP = 11
+ID_GORILLA_HAND = 12
+ID_GORILLA_HEAD = 13
+
+SIZE_8x8 = 0
+SIZE_16x16 = 1
+	
+GFX:
+	.addr $0000, GFX_HERO, GFX_BANANARANG, GFX_MINOTAUR, GFX_EXPLOSION, GFX_BEHOLDER, GFX_BIRD, GFX_BLOB, GFX_GHOST, GFX_SHADOW, GFX_BEHOLDER_PROJECTILE, GFX_POWERUP, GFX_GORILLA_HAND, GFX_GORILLA_HEAD
+AI:
+	.addr $0000, Ai.Hero.run-1, Ai.Bananarang.run-1, Ai.Minotaur.run-1, Ai.Explosion.run-1, Ai.Beholder.run-1, Ai.Bird.run-1, Ai.Blob.run-1, Ai.Ghost.run-1, Ai.Shadow.run-1, Ai.BeholderProjectile.run-1, Ai.Powerup.run-1, Ai.GorillaHand.run-1, Ai.GorillaHead.run-1
+PALETTE:
+	.byte $00, $00, $01, $02, $01, $00, $01, $03, $02, $00, $01, $01, $01, $01
+HP:
+	.byte 0, 4, 0, 16, 0, 8, 6, 4, 24, 0, 0, 0, 0, 0
+SIZE:
+	.byte SIZE_8x8, SIZE_16x16, SIZE_8x8, SIZE_16x16, SIZE_16x16, SIZE_16x16, SIZE_16x16, SIZE_16x16, SIZE_16x16, SIZE_8x8, SIZE_8x8, SIZE_16x16, SIZE_16x16, SIZE_16x16
+	
+GFX_HERO:
+	;down
+	.byte $00,$01,$10,$11
+	.byte $02,$03,$12,$13
+	.byte $00,$00,$00,$00
+	;left
+	.byte $06,$07,$16,$17
+	.byte $08,$09,$18,$19
+	.byte $0A,$0B,$1A,$1B
+	;up
+	.byte $20,$21,$30,$31
+	.byte $22,$23,$32,$33
+	.byte $24,$25,$34,$35
+	
+GFX_BANANARANG:
+	.byte $0E,$0F,$1E,$1F,$2E,$3E,$3F
+	
+GFX_MINOTAUR:
+	.byte $4A,$4B,$5A,$5B ;down
+	.byte $4C,$4D,$5C,$5D
+	.byte $4E,$4F,$5E,$5F
+	.byte $6A,$6B,$7A,$7B ;up
+	.byte $6C,$6D,$7C,$7D
+	.byte $6E,$6F,$7E,$7F
+	.byte $8A,$8B,$9A,$9B ;left
+	.byte $8C,$8D,$9C,$9D
+	.byte $8E,$8F,$9E,$9F
+	
+GFX_EXPLOSION:
+	.byte $60,$61,$70,$71
+	.byte $62,$63,$72,$73
+	.byte $64,$65,$74,$75
+	.byte $66,$67,$76,$77
+	.byte $FF,$FF,$78,$79
+
+GFX_BEHOLDER:
+	.byte $46,$47,$56,$57 ;eye opened
+	.byte $48,$49,$58,$59 ;eye closed
+	.byte $42,$43,$52,$53 ;opening-1
+	.byte $44,$45,$54,$55 ;opening-2
+	.byte $40,$41,$50,$51 ;attack
+	
+GFX_BIRD:
+	.byte $86,$87,$96,$97 ;standing
+	.byte $80,$81,$90,$91 ;flying
+	.byte $82,$83,$92,$93
+	.byte $84,$85,$94,$95
+	
+GFX_BLOB:
+	.byte $AA,$AB,$BA,$BB
+	.byte $AC,$AD,$BC,$BD
+	.byte $AE,$AF,$BE,$BF
+
+GFX_GHOST:
+	.byte $A0,$A1,$B0,$B1 ;happy
+	.byte $A2,$A3,$B2,$B3
+	.byte $A4,$A5,$B4,$B5
+	.byte $A0,$A6,$B0,$B6 ;angry
+	.byte $A2,$A7,$B2,$B7
+	.byte $A4,$A8,$B4,$B8
+
+GFX_SHADOW:
+	.byte $68,$FF
+
+GFX_BEHOLDER_PROJECTILE:
+	.byte $2F
+
+GFX_POWERUP:
+	.byte $04,$05,$14,$15
+	.byte $2A,$2B,$3A,$3B
+	.byte $2C,$2D,$3C,$3D
+	.byte $C0,$C1,$D0,$D1
+	.byte $C2,$C3,$D2,$D3
+	.byte $E4,$E5,$F4,$F5
+	.byte $E8,$E9,$F8,$F9
+	.byte $EA,$EB,$FA,$FB
+
+GFX_GORILLA_HAND:
+	.byte $E0,$E1,$F0,$F1
+	
+GFX_GORILLA_HEAD:
+	.byte $C4,$C5,$D4,$D5
+	.byte $C6,$C7,$D6,$D7
+	.byte $C8,$C9,$D8,$D9
+
+	
+	

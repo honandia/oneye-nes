@@ -1,0 +1,37 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+.use MapScript
+
+
+.proc run
+	Ai.switch update,create,,damage
+	rts
+.endproc
+
+.proc update
+	rts
+.endproc
+
+create:
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	jsr MapScript.getDungeonNumber
+	cmp #1
+	beq @head1
+	cmp #2
+	beq @head2
+	@head0:
+		Actor.setAnimation Data.Animation.GORILLA_HEAD0
+		rts
+	@head1:
+		Actor.setAnimation Data.Animation.GORILLA_HEAD1
+		rts
+	@head2:
+		Actor.setAnimation Data.Animation.GORILLA_HEAD2
+		rts
+
+damage:
+	lda #Ai.RESULT::PASS_THROUGH
+	sta Ai.result
+	rts

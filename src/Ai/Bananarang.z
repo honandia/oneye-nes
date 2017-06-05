@@ -1,0 +1,124 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+.use Game
+
+STATE_FLY = 0
+STATE_RETURN = 1
+
+state = Actor.var0
+
+
+.proc run
+	Ai.switch update,create,collide
+	rts
+.endproc
+
+.proc update
+	lda state,x
+	bne return
+	fly:
+		dec Actor.timer,x
+		bne @skipDestroy
+			lda #STATE_RETURN
+			sta state,x
+		@skipDestroy:
+		rts
+	return:
+		lda Ai.Hero.px
+		clc
+		adc #6
+		sec
+		sbc Actor.px,x
+		cmp #8
+		bcs @skipDestroy
+		lda Ai.Hero.py
+		clc
+		adc #6
+		sec
+		sbc Actor.py,x
+		cmp #8
+		bcs @skipDestroy
+			jsrrts Actor.destroy
+		@skipDestroy:
+		
+		@vertical:
+			lda Ai.Hero.px
+			clc
+			adc #4
+			cmp Actor.px,x
+			bcc @left
+			lda Ai.Hero.px
+			sec
+			sbc #4
+			cmp Actor.px,x
+			bcc @horizontal
+			@right:
+				lda Game.bananarangSpeed
+				sta Actor.vx,x
+				bne @horizontal ;guaranteed branch
+			@left:
+				lda #0
+				sec
+				sbc Game.bananarangSpeed
+				sta Actor.vx,x
+		@horizontal:
+			lda Ai.Hero.py
+			clc
+			adc #4
+			cmp Actor.py,x
+			bcc @up
+			lda Ai.Hero.py
+			sec
+			sbc #4
+			cmp Actor.py,x
+			bcc @end
+			@down:
+				lda Game.bananarangSpeed
+				sta Actor.vy,x
+				bne @end ;guaranteed branch
+			@up:
+				lda #0
+				sec
+				sbc Game.bananarangSpeed
+				sta Actor.vy,x
+		@end:
+		rts
+.endproc
+
+create:
+	lda #STATE_FLY
+	sta state,x
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	Actor.setAnimation Data.Animation.BANANARANG_FLY
+	rts
+	
+collide: ;arg0(in:enemy)
+	ldy Ai.arg0
+	lda Actor.invincibility,y
+	bne @end
+		lda Game.bananarangPower
+		jsr Actor.damageY
+		lda Ai.result
+		cmp #Ai.RESULT::INVINCIBLE
+		beq @invincible
+		cmp #Ai.RESULT::PASS_THROUGH
+		beq @passThrough
+		cmp #Ai.RESULT::DAMAGED_NO_KNOCKBACK
+		beq @invincible
+		@damaged:
+			lda #STATE_RETURN
+			sta state,x
+			lda Actor.vy,x
+			sta Actor.knockbackY._vy
+			lda Actor.vx,x
+			jsrrts Actor.knockbackY
+		@invincible: ;deflect
+			lda #STATE_RETURN
+			sta state,x
+			rts
+		@passThrough:
+			rts
+	@end:
+	rts

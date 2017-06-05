@@ -1,0 +1,216 @@
+.use Global,*
+
+.zeropage
+ppuctrl: .res 1
+
+.bss
+ntscpal: .res 1
+
+.code
+
+BASE_NAMETABLE_ADDRS:
+	.byte $20,$24,$28,$2C
+
+.macro setAddr addr
+	bit PPUSTATUS
+	lda #>(addr)
+	sta PPUADDR
+	lda #<(addr)
+	sta PPUADDR
+.endmacro
+
+.macro setAddrFast addr ;use setAddr initially before using this one
+	lda #>(addr)
+	sta PPUADDR
+	lda #<(addr)
+	sta PPUADDR
+.endmacro
+
+.macro setAddrIndirect addr
+	bit PPUSTATUS
+	lda 1+(addr)
+	sta PPUADDR
+	lda 0+(addr)
+	sta PPUADDR
+.endmacro
+
+.macro setTile px,py,id ;a,x,tmp0 / absolute screen coordinates
+	ldx px
+	lda py
+	ldy id
+	jsr _setTile
+.endmacro
+
+.macro rewritePpuctrl ;used to fix scrolling
+	lda ppuctrl
+	sta PPUCTRL
+.endmacro
+
+;prepare only, changes will take effect on next ppuctrl_rewrite, ppuctrl_set, etc.
+.macro prepareBaseNametable val ;(0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
+	lda ppuctrl
+	and #%11111100
+	ora val
+	sta ppuctrl
+.endmacro
+
+.macro setBaseNametable val ;(0 = $2000; 1 = $2400; 2 = $2800; 3 = $2C00)
+	lda ppuctrl
+	and #%11111100
+	ora val
+	sta ppuctrl
+	sta PPUCTRL
+.endmacro
+
+;a(out)
+.macro getBaseNametable
+	lda ppuctrl
+	and #%00000011
+.endmacro
+
+.macro getBaseNametableAddr ;y
+	getBaseNametable
+	tay
+	lda BASE_NAMETABLE_ADDRS,y
+.endmacro
+
+.macro setPpuctrl bits
+	lda #bits
+	ora ppuctrl
+	sta ppuctrl
+	sta PPUCTRL
+.endmacro
+
+.macro unsetPpuctrl bits
+	lda #bits
+	eor #$FF
+	and ppuctrl
+	sta ppuctrl
+	sta PPUCTRL
+.endmacro
+
+
+.macro writeOam absaddr,px,py,attr,tile
+	.ifnblank py
+		lda py
+		sta absaddr
+	.endif
+	.ifnblank tile
+		lda tile
+		sta absaddr+1
+	.endif
+	.ifnblank attr
+		lda attr
+		sta absaddr+2
+	.endif
+	.ifnblank px
+		lda px
+		sta absaddr+3
+	.endif
+.endmacro
+
+.macro clearOam absaddr
+	lda #$FF
+	sta absaddr
+.endmacro
+
+
+.proc waitVblank
+	@loop:
+		lda PPUSTATUS
+		bpl @loop
+	rts
+.endproc
+
+.proc detectNtscPal
+	;http://nesdev.com/bbs/viewtopic.php?t=4057
+	lda PPUSTATUS		; clear VBL flag
+	@wvbl:
+		lda PPUSTATUS
+		bpl @wvbl
+
+	ldx #52 			; 29799 delay
+	ldy #24
+	@dly:
+		dex
+		bne @dly
+		dey
+		bne @dly
+
+	ldx #$00
+	lda PPUSTATUS		; high bit set if NTSC, clear if PAL
+	bmi @ntsc
+		ldx #$01
+	@ntsc:
+	stx ntscpal
+	rts
+.endproc
+
+
+.proc startup
+	jsr waitVblank
+	jsr waitVblank
+	lda #$00
+	sta ppuctrl
+	sta PPUCTRL
+	sta PPUMASK
+	lda #$00
+	sta ppuctrl
+	
+	jsr waitVblank
+	jsr detectNtscPal ;2 frames
+	jsr waitVblank
+	jsr init
+	setPpuctrl PPUCTRL::NMI_ENABLED
+	rts
+.endproc
+
+.proc _setTile ;a(in:ypos),x(in:xpos),y(in:tile id),tmp0,tmp1
+	sty tmp1
+	bit PPUSTATUS
+	lsr a
+	lsr a
+	lsr a ;py/=8
+	lsr a
+	lsr a
+	lsr a ;py/=8
+	sta tmp0
+	getBaseNametableAddr
+	clc
+	adc tmp0
+	sta PPUADDR
+	
+	lda #$00
+	sta PPUADDR
+	
+	lda tmp1
+	sta PPUDATA
+	
+;	ldx #(px*2 + ((py*2*32) & $FF))
+;	ldy #(py*2/8)
+;	lda #(w*2)
+;	sta mb_width
+;	lda #(h*2)
+;	sta mb_height
+.endproc
+
+.proc init ;a - this sets up the PPU
+	lda #$00
+	sta ppuctrl
+	setPpuctrl PPUCTRL::BG_ADDR_1000
+	lda #%00011110 ; enable sprite and background visibility+clipping
+	sta PPUMASK
+	rts
+.endproc
+
+.proc enableVideo
+	lda #%00011110 ; a - enable sprite and background visibility+clipping
+	sta PPUMASK
+	rts
+.endproc
+
+.proc disableVideo ; a - disable video output so we can write to vram not only during vblank
+	lda #%00000110 ; disable sprite and background visibility
+	sta PPUMASK
+	rts
+.endproc

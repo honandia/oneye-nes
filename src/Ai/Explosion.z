@@ -1,0 +1,23 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+
+.proc run
+	Ai.switch update,create
+	rts
+.endproc
+
+.proc update
+	dec Actor.timer,x
+	bne @skipDestroy
+		jsrrts Actor.destroy
+	@skipDestroy:
+	rts
+.endproc
+
+create:
+	lda #21
+	sta Actor.timer,x
+	rts
+

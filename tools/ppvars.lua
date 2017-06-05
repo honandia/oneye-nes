@@ -1,0 +1,1 @@
+dofile("pputils.lua")local timer = 0while(true) do	emu.frameadvance()	p_reset(0,0)		p16(0xFE)	p16(0xFF)	p8("Game_bananarangSpeed")	--[[for i=6,7 do		p8("Actor_animationAddrL",i)		p8("Actor_animationAddrH",i)		p8("Actor_animationIndex",i)		p8("Actor_animationFrame",i)	end--]]		timer = timer + 1end

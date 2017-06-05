@@ -1,0 +1,136 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+.use Data.Actor
+
+state = Actor.var0
+shadowIndex = Actor.var1
+floatTimer = Actor.var2
+
+STATE_GUARD = 0
+STATE_ATTACK = 1
+
+.proc run
+	Ai.switch update,create,,damage,destroy
+	rts
+.endproc
+
+.proc update
+	tmpPx = tmp1
+	tmpPy = tmp2
+	tmpFloatDy = tmp1
+	
+	ldy floatTimer,x
+	lda FLOAT_DY,y
+	sta tmpFloatDy
+	
+	ldy shadowIndex,x
+	eor #$FF
+	clc
+	adc #1
+	clc
+	adc Ai.Shadow.verticalOffset,y
+	sta Ai.Shadow.verticalOffset,y
+	
+	;ldy floatTimer,x
+	;lda FLOAT_DY,y
+	lda tmpFloatDy
+	clc
+	adc Actor.py,x
+	sta Actor.py,x
+	inc floatTimer,x
+	lda floatTimer,x
+	cmp #32
+	bne @skipResetFloatTimer
+		lda #0
+		sta floatTimer,x
+	@skipResetFloatTimer:
+	
+	lda state,x
+	bne attack
+	guard:
+		dec Actor.timer,x
+		bne @end
+			lda #STATE_ATTACK
+			sta state,x
+			lda #60
+			sta Actor.timer,x
+			Actor.setAnimation Data.Animation.BEHOLDER_OPEN_EYE
+		@end:
+		rts
+	attack:
+		lda Actor.timer,x
+		cmp #40
+		bne @skipAttack
+			lda Actor.px,x
+			sta tmpPx
+			lda Actor.py,x
+			sta tmpPy
+			
+			txa
+			pha
+			Actor.createEnemy #Data.Actor.ID_BEHOLDER_PROJECTILE
+			lda tmpPx
+			sta Actor.px,x
+			lda tmpPy
+			sta Actor.py,x
+			lda #4
+			sta Actor.vy,x
+			pla
+			tax
+		@skipAttack:
+		
+		dec Actor.timer,x
+		bne @end
+			lda #STATE_GUARD
+			sta state,x
+			lda #120
+			sta Actor.timer,x
+			Actor.setAnimation Data.Animation.BEHOLDER_CLOSE_EYE
+			
+		@end:
+		rts
+	
+	FLOAT_DY: .byte 1,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,256-1,0,0,0,256-1,0,256-1,0,0,0,0,0,0,0,0,0
+.endproc
+
+create:
+	Ai.Util.createShadow #24
+	tya
+	sta shadowIndex,x
+	
+	lda #STATE_GUARD
+	sta state,x
+	lda #60
+	sta Actor.timer,x
+	Actor.setAnimation Data.Animation.BEHOLDER_IDLE
+	rts
+
+damage:
+	lda state,x
+	cmp #STATE_GUARD
+	beq @invincible
+	@damage:
+		lda Ai.arg0
+		jsr Ai.Util.damage
+		;TODO: put knockback call in enemy AIs (on damage)
+		lda #Ai.RESULT::DAMAGED_NO_KNOCKBACK
+		sta Ai.result
+		rts
+	@invincible:
+		lda #Ai.RESULT::INVINCIBLE
+		sta Ai.result
+		rts
+
+destroy:
+	txa
+	pha
+	lda shadowIndex,x
+	bmi @end
+		tax
+		jsr Actor.destroy
+	@end:
+	pla
+	tax
+	rts

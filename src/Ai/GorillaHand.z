@@ -1,0 +1,28 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+
+
+.proc run
+	Ai.switch update,create,,damage
+	rts
+.endproc
+
+.proc update
+	rts
+.endproc
+
+create:
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	Actor.setAnimation Data.Animation.GORILLA_HAND_RIGHT
+	cpx #Actor.ENEMY_INDEX_START+2
+	bcc @end
+		Actor.setAnimation Data.Animation.GORILLA_HAND_LEFT
+	@end:
+	rts
+
+damage:
+	lda #Ai.RESULT::PASS_THROUGH
+	sta Ai.result
+	rts

@@ -1,0 +1,115 @@
+.use Global,*
+.use Data.Actor
+.use Data.Animation
+.use Actor
+.use Map
+.use MapScript
+.use Ppu
+.use Screen
+.use Ai
+
+bananarangLevel: .reszp 1
+bananarangSpeed: .reszp 1
+bananarangPower: .reszp 1
+gameOverScreenTimer: .reszp 1
+screenChangeTimer: .reszp 1
+
+initialize:
+	jsrrts Screen.Title.load
+	
+start:
+	jsr Ppu.disableVideo
+	Game.loadPalette_VBL Game.PALETTE
+	jsr Ppu.enableVideo
+	
+	lda #Screen.ID_NONE
+	sta Screen.activeScreen
+	
+	lda #3
+	sta Game.bananarangSpeed
+	lda #2
+	sta bananarangPower
+	
+	lda #0
+	sta MapScript.powerup1Collected
+	sta MapScript.powerup2Collected
+	sta MapScript.powerup3Collected
+	
+	;DEBUG
+	;lda #5
+	;sta Game.bananarangSpeed
+	;lda #30
+	;sta bananarangPower
+	
+	ldx #Actor.INDEX_HERO
+	Actor.createX #Data.Actor.ID_HERO
+	lda #120
+	sta Actor.px,x
+	;lda #84
+	sta Actor.py,x
+	lda #Actor.DIRECTION_RIGHT
+	sta Actor.direction,x
+	Actor.setAnimation Data.Animation.HERO_IDLE_RIGHT
+	
+	lda #0 + 3*4
+	sta Map.worldIndex
+	jsrrts Map.loadScreen
+	
+update:
+	lda Screen.activeScreen
+	bmi @game
+	@screen:
+		jsrrts Screen.update
+	@game:
+	
+	lda screenChangeTimer
+	beq @skipScreenChangeTimer
+		dec screenChangeTimer
+	@skipScreenChangeTimer:
+	
+	lda gameOverScreenTimer
+	beq @skipGameOverTimer
+		dec gameOverScreenTimer
+		bne @skipGameOver
+		jsrrts Screen.GameOver.load
+	@skipGameOverTimer:
+	lda Ai.Hero.id
+	bne @skipGameOver
+		lda #60
+		sta gameOverScreenTimer
+	@skipGameOver:
+	jsr Actor.updateAll
+	jsrrts MapScript.update
+	
+	
+	
+	
+.macro loadPalette_VBL addr
+	lda #<addr
+	ldy #>addr
+	jsr _loadPalette_VBL
+.endmacro
+.proc _loadPalette_VBL
+	addr: .reszp 2
+	sta addr
+	sty addr+1
+	jsr Ppu.disableVideo
+	Ppu.setAddr $3F00
+	ldy #0
+	@loop:
+		lda (addr),y
+		sta PPUDATA
+		iny
+		cpy #$20
+		bne @loop
+	jsrrts Ppu.enableVideo
+.endproc
+
+PALETTE:
+	.byte $29,$08,$19,$39, $29,$2D,$10,$37, $29,$07,$17,$27, $29,$0F,$10,$20
+	.byte $29,$03,$14,$35, $29,$15,$27,$37, $29,$04,$10,$30, $29,$01,$21,$3C
+PALETTE_DUNGEON:
+	.byte $0F,$1C,$2C,$39, $0F,$0F,$17,$27, $0F,$0F,$16,$25, $0F,$0F,$10,$20
+	.byte $0F,$03,$14,$35, $0F,$15,$27,$37, $0F,$15,$26,$37, $0F,$08,$19,$39
+
+

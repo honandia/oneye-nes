@@ -1,0 +1,241 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+.use Data.Actor
+.use Map
+.use Game
+.use MapScript
+
+SPEED = 1
+id = Actor.id
+px = Actor.px
+py = Actor.py
+vx = Actor.vx
+vy = Actor.vy
+
+
+.proc run
+	Ai.switch update, Ai.dummy, collide, damage
+	rts
+.endproc
+
+.proc update
+	jsr handleInput
+	
+	lda Actor.direction,x
+	asl a
+	tay
+	lda joy1
+	and #JOY_LEFT|JOY_UP|JOY_RIGHT|JOY_DOWN
+	bne @walking
+		lda IDLE_ANIMATIONS,y
+		pha
+		lda IDLE_ANIMATIONS+1,y
+		tay
+		pla
+		jsr Actor._setAnimation
+		jmp @skipAnimation
+	@walking:
+		lda WALKING_ANIMATIONS,y
+		pha
+		lda WALKING_ANIMATIONS+1,y
+		tay
+		pla
+		jsr Actor._setAnimation
+	@skipAnimation:
+	
+	jsrrts checkForScreenChange
+	
+	IDLE_ANIMATIONS: .addr Data.Animation.HERO_IDLE_LEFT,Data.Animation.HERO_IDLE_UP,Data.Animation.HERO_IDLE_RIGHT,Data.Animation.HERO_IDLE_DOWN
+	WALKING_ANIMATIONS: .addr Data.Animation.HERO_WALK_LEFT,Data.Animation.HERO_WALK_UP,Data.Animation.HERO_WALK_RIGHT,Data.Animation.HERO_WALK_DOWN
+.endproc
+
+checkForScreenChange:
+	ldy joy1
+	tya
+	and #JOY_RIGHT
+	beq @skipRight
+		lda px
+		cmp #256-10
+		bcs @right
+	@skipRight:
+	tya
+	and #JOY_LEFT
+	beq @skipLeft
+		lda px
+		cmp #10
+		bcc @left
+	@skipLeft:
+	tya
+	and #JOY_DOWN
+	beq @skipDown
+		lda py
+		cmp #208-10
+		bcs @down
+	@skipDown:
+	tya
+	and #JOY_UP
+	beq @skipUp
+		lda py
+		cmp #16+8
+		bcc @up
+	@skipUp:
+	rts
+	@left:
+		lda #256-8
+		sta px
+		dec Map.worldIndex
+		jsrrts Map.loadScreen
+	@right:
+		lda #8
+		sta px
+		inc Map.worldIndex
+		jsrrts Map.loadScreen
+	@up:
+		lda #208-8
+		sta py
+		lda Map.worldIndex
+		sec
+		sbc #Map.WORLD_W
+		sta Map.worldIndex
+		jsrrts Map.loadScreen
+	@down:
+		lda #16+8
+		sta py
+		lda Map.worldIndex
+		clc
+		adc #Map.WORLD_W
+		sta Map.worldIndex
+		jsrrts Map.loadScreen
+
+handleInput:
+	tmpPx = tmp1
+	tmpPy = tmp2
+	tmpDirection = tmp3
+	lda #0
+	sta vx
+	sta vy
+	
+	@up:
+		lda joy1
+		and #JOY_UP
+		beq @down
+			lda #256-SPEED
+			sta Actor.vy,x
+			lda #Actor.DIRECTION_UP
+			sta Actor.direction,x
+	@down:
+		lda joy1
+		and #JOY_DOWN
+		beq @left
+			lda #SPEED
+			sta Actor.vy,x
+			lda #Actor.DIRECTION_DOWN
+			sta Actor.direction,x
+	@left:
+		lda joy1
+		and #JOY_LEFT
+		beq @right
+			lda #256-SPEED
+			sta Actor.vx,x
+			lda #Actor.DIRECTION_LEFT
+			sta Actor.direction,x			
+	@right:
+		lda joy1
+		and #JOY_RIGHT
+		beq @B
+			lda #SPEED
+			sta Actor.vx,x
+			lda #Actor.DIRECTION_RIGHT
+			sta Actor.direction,x
+	@B:
+		lda joy1Press
+		and #JOY_B
+		beq @end
+			lda Actor.id+Actor.INDEX_WEAPON
+			bne @end ;only shoot when old banana has returned to monkey
+			lda Actor.px,x
+			sta tmpPx
+			lda Actor.py,x
+			sta tmpPy
+			lda Actor.direction,x
+			sta tmpDirection
+			;ATTACK!!!
+			txa
+			pha
+			ldx #Actor.INDEX_WEAPON
+			Actor.createX #Data.Actor.ID_BANANARANG
+			lda tmpPx
+			sta Actor.px,x
+			lda tmpPy
+			sta Actor.py,x
+			ldy tmpDirection
+			lda @DIRECTION_VX,y
+			bmi @vxNeg
+			bne @vxPos
+				@vxZero:
+					lda #0
+					jmp @skipVx
+				@vxPos:
+					lda Game.bananarangSpeed
+					jmp @skipVx
+				@vxNeg:
+					lda #0
+					sec
+					sbc Game.bananarangSpeed
+			@skipVx:
+			sta Actor.vx,x
+			lda @DIRECTION_VY,y
+			bmi @vyNeg
+			bne @vyPos
+				@vyZero:
+					lda #0
+					jmp @skipVy
+				@vyPos:
+					lda Game.bananarangSpeed
+					jmp @skipVy
+				@vyNeg:
+					lda #0
+					sec
+					sbc Game.bananarangSpeed
+			@skipVy:
+			sta Actor.vy,x
+			lda #15
+			sta Actor.timer,x
+			;Actor.setAnimation Data.Animation.BANANARANG_FLY
+			pla
+			tax
+	@end:
+	rts
+	@DIRECTION_VX: .byte 256-1,0,1,0
+	@DIRECTION_VY: .byte 0,256-1,0,1
+
+
+collide: ;arg0:enemy
+	ldy Ai.arg0
+	lda Actor.id,y
+	sty $FD
+	sta $FF
+	inc $FE
+	cmp #Data.Actor.ID_POWERUP
+	bne @enemy
+		jsr Actor.destroyY
+		jsrrts MapScript.collectPowerup
+	@enemy:
+	lda Actor.invincibility,x
+	bne @end
+		lda #1
+		jsr Actor.damage
+		lda Actor.vy,y
+		sta Actor.knockback._vy
+		lda Actor.vx,y
+		jsr Actor.knockback
+		lda #90
+		sta Actor.invincibility,x
+	@end:
+	rts
+
+damage:
+	lda Ai.arg0
+	jsrrts Ai.Util.damage

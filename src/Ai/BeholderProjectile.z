@@ -1,0 +1,34 @@
+.use Global,*
+.use Ai
+.use Actor
+.use Data.Animation
+.use Map
+
+.proc run
+	Ai.switch update,create,,damage
+	rts
+.endproc
+
+.proc update
+	dec Actor.timer,x
+	beq @skipDestroy
+	lda Actor.py,x
+	cmp #Map.MAP_H*16+16
+	bcc @skipDestroy
+	@destroy:
+		jsrrts Actor.destroy
+	@skipDestroy:
+	rts
+.endproc
+
+create:
+	lda #60
+	sta Actor.timer,x
+	Actor.setFlags Actor.FLAG::NO_MAP_COLLISION
+	Actor.setAnimation Data.Animation.NONE
+	rts
+
+damage:
+	lda #Ai.RESULT::PASS_THROUGH
+	sta Ai.result
+	rts
