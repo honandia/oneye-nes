@@ -45,6 +45,8 @@ var0: .resbss MAX_ACTORS
 var1: .resbss MAX_ACTORS
 var2: .resbss MAX_ACTORS
 
+gravity: .resbss MAX_ACTORS
+
 .macro setFlags f
 	lda Actor.flags,x
 	ora #(f)
@@ -82,6 +84,9 @@ var2: .resbss MAX_ACTORS
 	sta Actor.vy,x
 	sta Actor.animationAddrH,x
 	sta Actor.animationIndex,x
+	
+	sta Actor.gravity,x
+	
 	Ai.call #Ai.EVENT::CREATE
 	rts
 .endproc
@@ -378,7 +383,33 @@ var2: .resbss MAX_ACTORS
 	rts
 .endproc
 
+.proc applyGravity
+
+		lda Actor.flags,x
+		and #FLAG::NO_MAP_COLLISION
+		bne @notModifyVy
+
+
+		;modify actors vy with gravity
+		lda Actor.gravity,x
+		cmp #5 ; max gravity value
+		beq @notAceleration
+			adc #1
+			sta Actor.gravity,x
+			@notAceleration:
+			lda Actor.vy,x
+			clc
+			adc Actor.gravity,x
+			sta Actor.vy,x	
+			
+	@notModifyVy:
+	rts
+.endproc
+
 .proc updatePhysics
+
+	jsr applyGravity
+	
 	lda Actor.px,x
 	clc
 	adc Actor.vx,x
